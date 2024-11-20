@@ -7,9 +7,12 @@ namespace UrlShortener.Api.Controllers;
 public class UrlShortenerController : ControllerBase
 {
     private readonly IDatabase _urlDatabase;
+    private readonly IConfiguration _configuration;
+    private const int UrlTimeToLiveDays = 7;
 
-    public UrlShortenerController(IConnectionMultiplexer connectionMultiplexer)
+    public UrlShortenerController(IConnectionMultiplexer connectionMultiplexer, IConfiguration configuration)
     {
+        _configuration = configuration;
         _urlDatabase = connectionMultiplexer.GetDatabase();
     }
 
@@ -24,17 +27,18 @@ public class UrlShortenerController : ControllerBase
             urlKey = HashService.Get8LengthHash(url + salt++);
         } while (!_urlDatabase.StringGet(urlKey).IsNullOrEmpty);
 
-        _urlDatabase.StringSet(urlKey, url);
+        _urlDatabase.StringSet(urlKey, url, TimeSpan.FromDays(UrlTimeToLiveDays));
         
         return urlKey;
     }
 
-    [HttpGet("{url}")]
-    public ActionResult GetRedirectUrl(string url)
+    [HttpGet("{id}")]
+    public ActionResult GetRedirectUrl(string id)
     {
-        var urlValue = _urlDatabase.StringGet(url);
+        var urlValue = _urlDatabase.StringGet(id);
         if (urlValue.IsNullOrEmpty)
-            return BadRequest("Url not found");
+            return Redirect(_configuration["Frontend:InvalidUrl"]);
+        _urlDatabase.StringSet(id, urlValue, TimeSpan.FromDays(UrlTimeToLiveDays));
         return Redirect(urlValue.ToString());
     }
 }
